@@ -1,0 +1,408 @@
+#+title: Lisp 3rd Edition
+#+author: Patrick Henry Winston & Berthold Klaus Paul Horn
+#+date: 1989
+
+* CHAPTER 12 MACROS AND BACKQUOTE
+
+** Primary Purpose: How to Define Macro Procedures
+
+The  primary purpose  of  this chapter  is  to show  how  to define  /macro
+procedures/, which do their work in two steps:
+
+1. first, macros use their arguments to build *intermediate* forms;
+   + When a macro is compiled, the *intermediate* form is /not/ evaluated;
+   + the *intermediate* form is spliced into the place where the macro
+     appears, eliminating the macro call.
+   + The *intermediate* form is computed only once, at the time of
+     compilation, and the macro call disapears.
+2. and second, macros evaluate the *intermediate* form to produce a value.
+
+** Secondary Purpose: Introduce the Backquote Mechanism
+
+A  secondary  purpose  of  this  chapter is  to  introduce  the  /backquote
+ mechanism/,  which simplifies  programming  tasks that  can  be viewed  as
+ filling in templates.   In particular, building the  intermediate forms of
+ macros often  can be  viewed as  filing in  templates, accounting  for the
+ popularity of backquoted forms in macro procedures.
+
+** Macros Translate and then Evaluate
+
+Now you will use =DEFMACRO= to define procedures called /macro procedures/,
+which have the following characteristics:
+
+- Macros do not evaluate their arguments.
+- Evaluating the body of a macro produces a form
+- The form is evaluated to produce a value
+
+Macros  are popular,  in part,  because  they make  it possible  to have  a
+transparent syntax on the surface and  a legal LISP form in the background.
+The job of  the macro is to  translate from one to  another before starting
+evaluation.
+
+#+begin_center
+
+Transparent form ---> LISP form ---> Value of LISP form
+
+#+end_center
+
+*** Example: when-plusp
+Print the symbol  =ALARM= whenever a certain  variable, ~PRESSURE~, becomes
+greater than zero.  Create a new procedure, ~WHEN-PLUSP~ that evaluates its
+second argument only when its first argument's value is positive.
+
+#+begin_example
+>  (setf  pressure  -3)
+>  (when-plusp  pressure (print  'alarm))
+NIL
+>  (setf pressure   3)
+>  (when-plusp   pressure   (print   'alarm))
+ALARM   ALARM
+#+end_example
+
+If you  try to define  ~WHEN-PLUSP~ as an  ordinary procedure, both  of its
+arguments are always evaluated before the body is evaluated.  The intent is
+that the  second argument is to  be evaluated only if  the first argument's
+value is  positive.  This is not  just a matter of  efficiency.  The second
+argument is  a form  with a  side-effect which must  be avoided  unless the
+condition matches.
+
+To avoid the undesired evaluation, you  must define ~WHEN-PLUSP~ as a macro
+procedure,  rather than  as  an ordinary  procedure.   The only  difference
+between the appearance of a macro  definition and an ordinary definition is
+that one uses ~DEFMACRO~ and the other uses ~DEFUN~.
+
+#+begin_example
+  (defmacro <macro name>
+    (<parameter 1>  <paramenter 2> ...  <parameter n>)
+    <form 1> <form 2> ... <form n>)
+#+end_example
+
+#+name: basic-defmacro
+#+begin_src lisp
+  (defmacro  when-plusp-macro  (number  result) (list  'when  (list  'plusp
+    number) result))
+#+end_src
+
+When  evaluated, the  listing and  quoting produce  an intermediate  ~WHEN~
+form,  which  then  is  evaluated.  Assuming  that  ~PRESSURE~s  valiue  is
+positive,  the intermediate  form leads  to th  evantual evaluation  of the
+second argument.
+
+** The Backquote Mechanism
+
+*** The Backquote Mechanism Simplifies Templated Filling
+
+Lisp's  *backquote mechanism*  makes  it  easy to  create  and to  complete
+templatelike expressions in which only a  few, variable, details need to be
+filled in.   Whenever a comma  appears inside a backquoted  expression, the
+subexpression immediately following the comma is replaced by its value:
+
+#+name: backquote-example1
+#+caption: Backquote Example 1
+#+begin_src lisp :results value verbatim :exports both
+  (defparameter variable 'test)
+  `(THIS IS A ,VARIABLE)
+#+end_src
+
+#+RESULTS: backquote-example1
+: (THIS IS A TEST)
+
+Backquote also allows a comma conjoined to an at sign =@=.  The combination
+unquotes the following expression, just as  a comma does, but the resulting
+value must be  a list..  The elements  in this list are  /spliced/ into the
+list in which the =,@= appears, rather than /inserted/ as an element.
+
+#+name: backquote-with=@-example
+#+caption: Backquote with @ Example
+#+begin_src lisp :results output :exports both
+  (defparameter variable '(more difficult example))
+  (print `(this is a ,variable))
+  (print `(this is a ,@variable))
+#+end_src
+
+#+RESULTS: backquote-with=@-example
+: 
+: (THIS IS A (MORE DIFFICULT EXAMPLE)) 
+: (THIS IS A MORE DIFFICULT EXAMPLE) 
+
+*** The Backquote Mechanism Simplifies Macro Writing
+
+The  *backquote  mechanism*  is  perfect   for  making  and  filling  macro
+templates.
+
+The ~WHEN-PLUSP~ macro can be viewed as filling in the following template:
+
+#+begin_example
+  (when (plusp <template slot of number>)
+    <template slot for result when number is positive>)
+#+end_example
+
+Rewriting this template in backquote form produces this:
+
+#+begin_src lisp
+`(when (plsup ,number) ,result)
+#+end_src
+
+Using a  backquote template is usually  much better than flailing  around a
+lost with =CONS=, =LIST=, =APPEND=, and the  like.  Here is a better way to
+define ~WHEN-PLUSP~ using backquote:
+
+#+begin_src lisp
+  (defmacro when-plusp-with-backquote (number result)
+    `(when (plusp ,number) ,result))
+#+end_src
+
+This is  better because the  backquote template  makes it clearer  wha tthe
+form to be evaluated  is to look like.  It is  good programming practice to
+include a comment with every macro  definition to illustrate what the macro
+does:
+
+#+name: backquote-example-with-comments
+#+captiion: Backquote Example with Comments
+#+begin_src lisp :results value :exports both
+  (defmacro when-plusp-with-backquote (number result)
+    ;; Sample translation:
+    ;; (when-plusp-with-backquote p (print 'alarm))
+    ;; --> (when (plusp p) (print 'alarm))
+    `(when (plusp ,number) ,result))
+#+end_src
+
+#+RESULTS:
+: WHEN-PLUSP-WITH-BACKQUOTE
+
+** Optional--Rest--Key Parameters Enable  More Powerful Macros
+
+You frequently want to define macro procedures taht have a varaible number
+of arguments.  To write such macro procedures, you need a way of slurping
+up an indefinite number of arguments.  Macros, like ordinary procedures,
+can have /optional/, /rest/, and /key/ parameters.
+
+#+name:backquote-with-optional-parameter
+#+caption: Backquote with Optional Parameter
+#+begin_src lisp :results value :exports both
+  (defmacro when-plusp-with-rest (number &rest rest)
+    `(when (plusp ,number) ,@rest)) ;Splice in extra arguments
+#+end_src
+
+#+RESULTS: backquote-with-optional-parameter
+: WHEN-PLUSP-WITH-REST
+
+** Macros Deserve Their Own File
+
+Big programs are usually separated into many files, one of which is devoted
+to macros.  This makes it easier to be sure that the macros are processed
+first if the Lisp program is compiled.  You want the macros to be processed
+first because many compilers assume taht  all yet-to-be-defined procedures
+are ordinary procedures, blundering badly whenever one turns out to be a
+macro.
+
+** Summary
+
+- Macros translate and then evaluate
+- The backqutoe mechanism simplifies template filling
+- The backquote mechanism simplifies macro writing
+- Optional, rest, and key parameters enable more powerful macros
+- Macros deserve their own file
+
+** Problems
+
+*** Problem 12-1
+
+Suppose you are an enthusiastic user of =GET=, but for obscure reasons, you
+do not like to use =SETF= when working with properties.  *Create =PUT=, a
+macro procedure that takes three arguments, a symbol, a value, and a
+property name, such that =PUT= translates:
+
+: (PUT <symbol> <value> <property name>)
+
+into
+
+: (SETF  (GET <symbol> <property name>) <value>)
+
+#+name: problem_12-1
+#+caption: Problem 12-1
+#+begin_src lisp :result value :exports both
+  (defmacro PUT (symbol value property-name)
+    `(SETF (GET ,symbol ,property-name) ,value))
+#+end_src
+
+#+RESULTS: problem_12-1
+: PUT
+
+*** Problem 12-2
+
+You decide to create =GETQ= and =PUTQ=.  Your =GETQ= is to translate
+
+: (getq <symbol> <property>)
+
+into
+
+: (get '<symbol> <property>)
+
+and =PUTQ= is to translate
+
+: (putq <symbol> <property> <value>)
+
+into
+
+: (setf (get '<symbol> property) value)
+
+#+name: problem_12-2-1
+#+caption: Problem 12-2-1
+#+begin_src lisp :results value :exports both
+  (defmacro getq (symbol property)
+    `(get ',symbol ,property))
+#+end_src
+
+#+RESULTS: problem_12-2-1
+: GETQ
+
+#+name: problem_12-2-2
+#+caption: Problem 12-2-2
+#+begin_src lisp :results value :exports both
+  (defmacro putq (symbol property value)
+    `(setf (get ',symbol ,property) ,value))
+#+end_src
+
+#+RESULTS: problem_12-2-2
+: PUTQ
+
+*** Problem 12-3
+
+Imagine that the designers of LISP had forgotten to include the =UNLESS=
+primitive.  Irritated, you decide to define your own =UNLESS= primitive,
+which you call =WHEN-NIL=.  Define ~WHEN-NIL~ such that it translates
+
+: (when-nil <trigger> <result>)
+
+into
+
+: (when (not <trigger>) <result))
+
+#+name: problem_12-3
+#+caption: Problem 12-3
+#+begin_src lisp :result value :exports both
+  (defmacro when-nil (trigger result)
+    `(when (not ,trigger) ,result))
+#+end_src
+
+#+RESULTS: problem_12-3
+: WHEN-NIL
+
+*** Problem 12-4
+
+Suppose, for some immensely peculiar reason, you want to form a =LET= that
+does not evaluate initial value forms.  Define =LETQ= such that =LETQ=
+arranges the following translation:
+
+#+begin_example
+(letq ((<variable1> <value1>)
+       (<variable2> <value2>)
+       ...)
+  <body>)
+  |
+  |
+  V
+(let ((<variable1> '<value1>)
+      (<variable2> '<value2>)
+      ...)
+  <body>)
+#+end_example
+
+#+name: problem_12-4
+#+caption: Problem 12-4
+#+begin_src lisp :result value :exports both
+  (defmacro letq (varvals &rest body)
+    (let ((r nil))
+      (dolist (v varvals `(let ,(reverse r) ,@body)))
+	(setf r (cons (cons (first v) `(',(second v))) r))))
+#+end_src
+
+#+RESULTS:
+: LETQ
+
+#+name: problem_12-4-2
+#+caption: Problem 12-4-2
+#+begin_src lisp :results value :exports both
+  (defmacro letq (arg-list &rest body)
+    `(let ,(mapcar (lambda (arg)
+		     (list (first arg)
+			   (cons 'quote (rest arg))))
+	    arg-list)
+       ,@body))
+#+end_src
+
+#+RESULTS: problem_12-4-2
+: LETQ
+
+*** Problem 12-5
+
+The =DEFUN= template is somewhat unfortunate.  Some language designers
+think it is prettier to combine the procedure name with the parameters so
+taht the first argument is a list that resembles a form.  Define =DEFINE=,
+a macro that uses =DEFUN=, but has the following template:
+
+: (define (<procedure name> <parameter 1> ... <parameter n>)
+:    <body>)
+
+#+name: problem_12-5
+#+caption: Problem 12-5
+#+begin_src lisp :result value :exports both
+  (defmacro define (procname-args &rest body)
+    `(defun ,(first procname-args) ,(rest procname-args)
+       ,@body))
+#+end_src
+
+#+RESULTS: problem_12-5
+: DEFINE
+
+*** Problem 12-6
+
+Define =PUNCTUATE=,  a procedure that  takes any number of  arguments.  The
+first argument must be  a list.  All other arguments are  to be gathered up
+and appended to the end of the first.
+
+: (punctuate-macro '(this is an example) 'so 'to 'speak)
+: (THIS IS AN EXAMPLE SO TO SPEAK)
+
+#+name: problem_12-6
+#+caption: Probem 12-6
+#+begin_src lisp :results value :exports both
+  (defun punctuate (f &rest r)
+    (append f r))
+#+end_src
+
+#+RESULTS: problem_12-6
+: PUNCTUATE
+
+*** Problem 12-7
+
+Define =PUNCTUATE-MACRO=, a macro procedure that takes any number of
+arguments.  The first argument must be a list.  All other arguments are to
+be gathered up and appended to the end of the first.  The first argument is
+to be evaluated but the rest are not.
+
+: (punctuate-macro '(this is an example) so to speak)
+: (THIS IS AN EXAMPLE SO TO SPEAK)
+
+#+name: problem_12-7
+#+caption: Problem 12-7
+#+begin_src lisp :results value :exports both
+  (defmacro punctuate-macro (f &rest r)
+    `(append ,f ',r))
+#+end_src
+
+#+RESULTS: problem_12-7
+: PUNCTUATE-MACRO
+
+###########################################################################
+# Local Variables:
+# display-line-numbers: t
+# fill-column: 75
+# display-fill-column-indicator-column: 76
+# eval: (display-fill-column-indicator-mode)
+# eval: (set-justification-full (point-min) (point-max))
+# eval: (visual-line-mode)
+# eval: (auto-fill-mode)
+# eval: (require 'org-tempo)
+# End:
